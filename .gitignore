@@ -1,0 +1,55 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Visual Studio Code related
+.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+**/build/
+
+# Symbolisation
+app.*.symbols
+
+# Obfuscation map
+app.*.map.json
+
+# Android Studio will place subdirectories here
+/android/app/debug
+/android/app/profile
+/android/app/release
+/android/.gradle/
+
+# État local des outils agents et binaires de test
+.superpowers/
+.mock_native/
+
+# Modèles IA lourds (GGUF) - Ne jamais commiter dans Git
+*.gguf
+*.bin
+models/
+assets/models/*.gguf
+fiches_pedagogiques/*.pdf

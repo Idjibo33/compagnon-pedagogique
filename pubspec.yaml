@@ -1,0 +1,69 @@
+name: compagnon_pedagogique
+description: "Assistant IA 100% hors ligne pour les enseignants du primaire en milieu rural."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+  flutter: ">=3.19.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Architecture & Injection
+  flutter_bloc: ^9.1.1
+  get_it: ^9.3.0
+  equatable: ^3.0.0
+
+  # Gestion fonctionnelle des erreurs (Either / TaskEither)
+  fpdart: ^1.2.0
+
+  # Interface Chat & Voix
+  flutter_ai_toolkit: ^1.0.0
+  flutter_markdown_plus: ^1.0.12
+  flutter_math_fork: ^0.7.4
+
+  # Moteur d'inférence IA local (Edge AI)
+  flutter_edge_ai: ^2.6.0
+  flutter_edge_ai_llama: ^0.1.0
+
+  # Base de données & RAG Vectoriel
+  sqflite: ^2.4.1
+  sqlite_vec: ^0.1.1
+  path_provider: ^2.1.5
+  path: ^1.9.0
+
+  # Téléchargement avec reprise & import local Xender/Carte SD
+  background_downloader: ^9.6.6
+  file_picker: ^13.4.0
+
+  # Export & impression PDF
+  pdf: ^3.11.1
+  printing: ^5.13.2
+  open_filex: ^5.0.0
+  share_plus: ^13.3.1
+
+  # Utilitaires
+  intl: ^0.20.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+dependency_overrides:
+  sqlite_vec:
+    path: packages/sqlite_vec
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/logo.png
+    - assets/db/programmes_scolaires.db
+    - assets/google_fonts/
+
+
