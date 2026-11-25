@@ -33,6 +33,13 @@ class AppConstants {
   // Dossiers sous-jacents
   static const String modelsDirectoryName = 'models';
   static const String pdfsDirectoryName = 'fiches_pdf';
+  static const String publicPdfDirectoryName = 'CompagnonPedagogique';
+
+  // Contrôles pré-vol et intégrité
+  /// Espace disque minimal requis pour le téléchargement ou l'import (1.5 Go)
+  static const int minFreeDiskSpaceBytes = 1610612736; // 1.5 * 1024^3
+  /// Magic number strict des fichiers GGUF (0x47 0x47 0x55 0x46 -> "GGUF")
+  static const List<int> ggufMagicNumber = [0x47, 0x47, 0x55, 0x46];
 
   // Suggestions rapides au lancement du chat
   static const List<String> chatQuickSuggestions = [

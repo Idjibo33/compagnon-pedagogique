@@ -70,6 +70,11 @@ class FakeModelRepo implements ModelManagerRepository {
     ) onStatus,
   }) =>
       TaskEither.right(unit);
+  @override
+  Future<int?> getAvailableDiskSpace() async => 2000000000;
+  @override
+  Future<bool> hasEnoughDiskSpace({int requiredBytes = 1610612736}) async =>
+      true;
 }
 
 void main() {

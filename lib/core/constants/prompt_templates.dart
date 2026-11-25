@@ -1,56 +1,98 @@
 class PromptTemplates {
   PromptTemplates._();
 
-  /// Prompt Système adapté à l'enseignement primaire en milieu rural et aux classes à effectif ou niveaux multiples.
+  /// Prompt système concis et structuré, calibré pour un petit modèle local
+  /// (Qwen 2.5 1.5B) au service des enseignants du primaire en milieu rural.
   static const String systemPrompt =
-      '''Tu es le "Compagnon Pédagogique", un assistant IA expert des programmes scolaires du primaire, spécialement conçu pour accompagner les enseignants en milieu rural (classes uniques, doubles niveaux, ressources matérielles limitées).
+      '''Tu es "Compagnon Pédagogique", un conseiller pédagogique rigoureux qui aide les enseignants du primaire en milieu rural (classes uniques, doubles niveaux, matériel simple : tableau noir, craie, ardoise, cahiers, graines ou bâtonnets).
 
-Principes pédagogiques à respecter scrupuleusement :
-1. Pragmatisme et sobriété : Propose des activités simples et réalisables avec le matériel disponible (ardoises, craie, cahiers de brouillon, graines, bâtonnets, matériel de récupération).
-2. Clarté et structure : Rédige toujours des fiches claires, lisibles et directement exploitables en classe.
-3. Rigueur disciplinaire : Appuie-toi en priorité sur les extraits des programmes scolaires fournis dans le contexte RAG.
-4. Pédagogie différenciée : Si la demande mentionne plusieurs niveaux ou une classe double, propose toujours une organisation en miroir (un groupe en autonomie pendant que l'enseignant anime la phase d'apprentissage avec l'autre groupe).
+Règles strictes :
+- Réponds toujours en français clair, correct et directement utilisable en classe.
+- Rédige en Markdown avec les sections « ## Objectifs », « ## Déroulement », « ## Exercices », « ## Corrigé ».
+- N'utilise jamais d'emoji.
+- Pour les mathématiques, écris les formules en LaTeX entre \$...\$ et utilise × ÷ √ si utile.
+- Si la demande mentionne un double niveau ou deux classes, propose une organisation en miroir (un groupe en autonomie, l'autre avec l'enseignant).
+- Reste concret, concis et fidèle au niveau demandé.''';
 
-Structure recommandée pour une fiche pédagogique :
-- Titre et niveau (ex : CM1 - Mathématiques)
-- Durée estimée et matériel nécessaire
-- Objectifs d'apprentissage (conformes aux programmes)
-- Déroulement des séances (Phase 1 : Découverte/Manipulation, Phase 2 : Institutionnalisation/Règle, Phase 3 : Entraînement/Autonomie)
-- Exercices d'application progressifs
-- Corrigé pour le maître
+  /// Plafond de caractères pour les extraits RAG injectés dans l'instruction
+  /// système afin de préserver la fenêtre de contexte (2048 tokens) et laisser
+  /// suffisamment d'espace à la réponse (~1024 tokens) sur Qwen 2.5 1.5B.
+  static const int maxRagContextChars = 2000;
 
-Mise en forme attendue par l'application :
-- Rédige en Markdown et utilise des titres de section « ## Objectifs », « ## Déroulement », « ## Exercices », « ## Corrigé ».
-- Ne produis jamais d'emoji : l'application affiche elle-même des icônes vectorielles pour les sections.
-- Pour les mathématiques, écris les fractions et formules en LaTeX entre \$...\$ (ou \$\$...\$\$ pour un bloc). Utilise les signes × ÷ √ et les fractions Unicode ½ ⅓ ¼ lorsque cela suffit.
+  static final RegExp _chatMlTagPattern = RegExp(r'<\|im_(?:start|end)\|>\s*');
 
-Reste toujours encourageant, concis, bienveillant et professionnel.''';
+  static String _stripChatMlTokens(String input) =>
+      input.replaceAll(_chatMlTagPattern, '').trim();
 
-  /// Formatage ChatML Qwen 2.5 strict conforme aux spécifications de la Mission 3
+  static String _truncateContext(String context, int maxChars) {
+    if (maxChars <= 0 || context.length <= maxChars) {
+      return context;
+    }
+    final slice = context.substring(0, maxChars);
+    final lastSpace = slice.lastIndexOf(RegExp(r'\s'));
+    final cutoff = lastSpace > (maxChars ~/ 2) ? lastSpace : maxChars;
+    return '${slice.substring(0, cutoff).trimRight()}…';
+  }
+
+  /// Construit l'instruction système brute (sans balises ChatML) à transmettre
+  /// à `InferenceModel.openSession(systemInstruction: ...)`.
+  ///
+  /// Le moteur `flutter_edge_ai` / `llamadart` applique lui-même le template
+  /// de chat natif du fichier GGUF : aucune balise `<|im_start|>` ne doit
+  /// être ajoutée manuellement ici.
+  static String buildSystemInstruction({
+    String formattedContext = '',
+    int maxContextChars = maxRagContextChars,
+  }) {
+    final sanitizedContext = _stripChatMlTokens(formattedContext);
+    if (sanitizedContext.isEmpty) {
+      return systemPrompt;
+    }
+
+    final boundedContext = _truncateContext(sanitizedContext, maxContextChars);
+
+    final buffer = StringBuffer(systemPrompt);
+    buffer.writeln();
+    buffer.writeln();
+    buffer.writeln(
+      'Appuie-toi PRIORITAIREMENT sur les extraits officiels ci-dessous, sans inventer de référence, et cite la source exacte (matière, niveau, page) en fin de réponse.',
+    );
+    buffer.writeln();
+    buffer.writeln('EXTRAITS DU PROGRAMME OFFICIEL :');
+    buffer.write(boundedContext);
+    return buffer.toString();
+  }
+
+  /// Nettoie la demande utilisateur (sans balises ChatML) pour l'envoyer via
+  /// `Message.text(text: ..., isUser: true)`.
+  static String buildUserPrompt(String prompt) => _stripChatMlTokens(prompt);
+
+  /// Formatage ChatML Qwen 2.5 brut (réservé aux moteurs sans template natif).
+  ///
+  /// Ne pas passer le résultat à `flutter_edge_ai` (`openSession` /
+  /// `addQueryChunk`), qui applique déjà le template de chat du GGUF.
   static String formatTeacherPrompt({
     required String prompt,
     required String formattedContext,
   }) {
+    final systemInstruction = buildSystemInstruction(
+      formattedContext: formattedContext,
+    );
+    final userPrompt = buildUserPrompt(prompt);
+
     final buffer = StringBuffer();
     buffer.writeln('<|im_start|>system');
-    buffer.writeln(
-      'Tu es "Compagnon Pédagogique", un conseiller pédagogique bienveillant et rigoureux qui aide les enseignants du primaire en milieu rural.\n'
-      'Rédige des fiches de cours, exercices et activités clairs, structurés en Markdown et directement utilisables au tableau noir.\n'
-      'Utilise des titres de section « ## Objectifs », « ## Déroulement », « ## Exercices », « ## Corrigé ». Ne produis jamais d\'emoji.\n'
-      'Pour les mathématiques, utilise les formules LaTeX entre \$...\$ et les signes × ÷ √ quand c\'est utile.\n'
-      'Appuie-toi PRIORITAIREMENT sur les extraits officiels ci-dessous et cite la source exacte (matière, niveau, page) à la fin de ta réponse.\n\n'
-      'EXTRAITS DU PROGRAMME OFFICIEL :\n'
-      '$formattedContext',
-    );
+    buffer.writeln(systemInstruction);
     buffer.writeln('<|im_end|>');
     buffer.writeln('<|im_start|>user');
-    buffer.writeln(prompt);
+    buffer.writeln(userPrompt);
     buffer.writeln('<|im_end|>');
     buffer.write('<|im_start|>assistant\n');
     return buffer.toString();
   }
 
-  /// Formatage ChatML spécifique à Qwen 2.5
+  /// Formatage ChatML complet avec historique (réservé aux moteurs sans
+  /// template natif).
   static String formatQwenPrompt({
     required String userQuery,
     String? ragContext,
@@ -60,21 +102,9 @@ Reste toujours encourageant, concis, bienveillant et professionnel.''';
 
     // System prompt
     buffer.writeln('<|im_start|>system');
-    buffer.writeln(systemPrompt);
-
-    if (ragContext != null && ragContext.trim().isNotEmpty) {
-      buffer.writeln();
-      buffer.writeln(
-        '--- EXTRAITS DES PROGRAMMES SCOLAIRES OFFICIELS (RAG) ---',
-      );
-      buffer.writeln(ragContext.trim());
-      buffer.writeln(
-        '---------------------------------------------------------',
-      );
-      buffer.writeln(
-        'Consigne : Utilise les extraits ci-dessus pour garantir la conformité pédagogique de ta réponse.',
-      );
-    }
+    buffer.writeln(
+      buildSystemInstruction(formattedContext: ragContext ?? ''),
+    );
     buffer.writeln('<|im_end|>');
 
     // Historique éventuel
@@ -90,7 +120,7 @@ Reste toujours encourageant, concis, bienveillant et professionnel.''';
 
     // Question utilisateur actuelle
     buffer.writeln('<|im_start|>user');
-    buffer.writeln(userQuery);
+    buffer.writeln(buildUserPrompt(userQuery));
     buffer.writeln('<|im_end|>');
 
     // Début de réponse du modèle

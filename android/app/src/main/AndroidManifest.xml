@@ -9,7 +9,6 @@
     <!-- Permissions Stockage local pour l'import de modèles .gguf (Xender, Bluetooth, Carte SD) -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" tools:replace="android:maxSdkVersion"/>
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
 
     <!-- Permissions Service d'arrière-plan pour background_downloader -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
@@ -21,7 +20,6 @@
         android:label="Compagnon Pédagogique"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:requestLegacyExternalStorage="true"
         android:usesCleartextTraffic="true">
 
         <activity

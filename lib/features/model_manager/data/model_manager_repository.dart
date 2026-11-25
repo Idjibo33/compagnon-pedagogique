@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:background_downloader/background_downloader.dart';
 import 'package:compagnon_pedagogique/core/constants/app_constants.dart';
 import 'package:compagnon_pedagogique/core/errors/failures.dart';
+import 'package:compagnon_pedagogique/core/utils/disk_space_checker.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
@@ -10,6 +11,14 @@ import '../domain/model_status.dart';
 
 abstract class ModelManagerRepository {
   Future<Directory> getModelsDirectory();
+
+  /// Vérifie l'espace disque libre disponible en octets.
+  Future<int?> getAvailableDiskSpace();
+
+  /// Vérifie si l'espace disque est suffisant (>= 1.5 Go par défaut).
+  Future<bool> hasEnoughDiskSpace({
+    int requiredBytes = AppConstants.minFreeDiskSpaceBytes,
+  });
 
   /// Vérifie l'état des modèles locaux en capturant les erreurs de stockage.
   TaskEither<Failure, Map<String, ModelFileStatus>> checkModelsStatus();
@@ -43,13 +52,33 @@ class ModelManagerRepositoryImpl implements ModelManagerRepository {
   final int? minLlmBytes;
   final int? minEmbBytes;
   final Directory? customModelsDirectory;
+  final DiskSpaceChecker _diskSpaceChecker;
 
   ModelManagerRepositoryImpl({
     FileDownloader? downloader,
     this.minLlmBytes,
     this.minEmbBytes,
     this.customModelsDirectory,
-  }) : _downloader = downloader ?? FileDownloader();
+    DiskSpaceChecker? diskSpaceChecker,
+  })  : _downloader = downloader ?? FileDownloader(),
+        _diskSpaceChecker = diskSpaceChecker ?? const SystemDiskSpaceChecker();
+
+  @override
+  Future<int?> getAvailableDiskSpace() async {
+    final dir = await getModelsDirectory();
+    return _diskSpaceChecker.getFreeDiskSpaceBytes(dir.path);
+  }
+
+  @override
+  Future<bool> hasEnoughDiskSpace({
+    int requiredBytes = AppConstants.minFreeDiskSpaceBytes,
+  }) async {
+    final dir = await getModelsDirectory();
+    return _diskSpaceChecker.hasEnoughSpace(
+      requiredBytes: requiredBytes,
+      path: dir.path,
+    );
+  }
 
   @override
   Future<Directory> getModelsDirectory() async {
@@ -189,6 +218,18 @@ class ModelManagerRepositoryImpl implements ModelManagerRepository {
       return TaskEither.tryCatch(() async {
         if (tasks.isEmpty) return unit;
 
+        // Contrôle pré-vol de l'espace disque (au moins 1.5 Go)
+        final hasSpace = await hasEnoughDiskSpace();
+        if (!hasSpace) {
+          final avail = await getAvailableDiskSpace();
+          final availStr = avail != null
+              ? ' (${SystemDiskSpaceChecker.formatBytes(avail)} disponible)'
+              : '';
+          throw StorageFailure(
+            'Espace disque insuffisant : au moins 1.5 Go d\'espace libre est requis pour télécharger les modèles$availStr.',
+          );
+        }
+
         // Écoute de la progression et des statuts via background_downloader
         _downloader.registerCallbacks(
           taskStatusCallback: (TaskStatusUpdate update) {
@@ -257,6 +298,18 @@ class ModelManagerRepositoryImpl implements ModelManagerRepository {
     required Function(double progress) onCopyProgress,
   }) {
     return TaskEither.tryCatch(() async {
+      // Contrôle pré-vol de l'espace disque (au moins 1.5 Go)
+      final hasSpace = await hasEnoughDiskSpace();
+      if (!hasSpace) {
+        final avail = await getAvailableDiskSpace();
+        final availStr = avail != null
+            ? ' (${SystemDiskSpaceChecker.formatBytes(avail)} disponible)'
+            : '';
+        throw StorageFailure(
+          'Espace disque insuffisant : au moins 1.5 Go d\'espace libre est requis pour importer un modèle$availStr.',
+        );
+      }
+
       final pickedFiles = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['gguf', 'bin'],
@@ -270,11 +323,41 @@ class ModelManagerRepositoryImpl implements ModelManagerRepository {
       final sourceFile = File(selectedFile.path!);
       final fileName = selectedFile.name.toLowerCase();
 
+      // Validation de la taille minimale
+      final sourceLength = await sourceFile.length();
+      if (sourceLength < 4) {
+        throw const ImportFailure(
+          'Fichier corrompu ou invalide : le fichier sélectionné est vide ou fait moins de 4 octets.',
+        );
+      }
+
+      // Validation stricte du Magic Number GGUF (0x47 0x47 0x55 0x46 -> "GGUF")
+      final raf = await sourceFile.open(mode: FileMode.read);
+      final List<int> magicBytes;
+      try {
+        magicBytes = await raf.read(4);
+      } finally {
+        await raf.close();
+      }
+
+      final isValidGguf = magicBytes.length == 4 &&
+          magicBytes[0] == AppConstants.ggufMagicNumber[0] &&
+          magicBytes[1] == AppConstants.ggufMagicNumber[1] &&
+          magicBytes[2] == AppConstants.ggufMagicNumber[2] &&
+          magicBytes[3] == AppConstants.ggufMagicNumber[3];
+
+      if (!isValidGguf) {
+        throw const ImportFailure(
+          'Fichier invalide ou corrompu : l\'en-tête ne correspond pas au format GGUF '
+          '(Magic Number attendu : 0x47 0x47 0x55 0x46 "GGUF").',
+        );
+      }
+
       // Identifier s'il s'agit du LLM ou de l'Embedding
       final String targetFileName;
       if (fileName.contains('e5') ||
           fileName.contains('embed') ||
-          sourceFile.lengthSync() < 500000000) {
+          sourceLength < 500000000) {
         targetFileName = AppConstants.embeddingModelFileName;
       } else {
         targetFileName = AppConstants.llmModelFileName;
@@ -283,24 +366,45 @@ class ModelManagerRepositoryImpl implements ModelManagerRepository {
       final modelsDir = await getModelsDirectory();
       final targetPath = p.join(modelsDir.path, targetFileName);
       final targetFile = File(targetPath);
+      final tempTargetPath = '$targetPath.tmp';
+      final tempTargetFile = File(tempTargetPath);
 
-      // Copie par morceaux pour éviter de saturer la RAM (fichiers > 1 Go)
-      final totalBytes = await sourceFile.length();
+      // Copie par morceaux atomique pour éviter de saturer la RAM et empêcher
+      // la persistance de fichiers partiels corrompus en cas d'interruption.
+      final totalBytes = sourceLength;
       int copiedBytes = 0;
 
       final reader = sourceFile.openRead();
-      final sink = targetFile.openWrite();
+      final sink = tempTargetFile.openWrite();
 
-      await for (final chunk in reader) {
-        sink.add(chunk);
-        copiedBytes += chunk.length;
-        onCopyProgress((copiedBytes / totalBytes).clamp(0.0, 1.0));
+      try {
+        await for (final chunk in reader) {
+          sink.add(chunk);
+          copiedBytes += chunk.length;
+          onCopyProgress((copiedBytes / totalBytes).clamp(0.0, 1.0));
+        }
+        await sink.flush();
+        await sink.close();
+
+        // Remplacement atomique du fichier de destination
+        if (await targetFile.exists()) {
+          await targetFile.delete();
+        }
+        await tempTargetFile.rename(targetPath);
+      } catch (e) {
+        try {
+          await sink.close();
+        } catch (_) {}
+        if (await tempTargetFile.exists()) {
+          await tempTargetFile.delete();
+        }
+        rethrow;
       }
 
-      await sink.flush();
-      await sink.close();
-
       return targetFileName;
-    }, (error, stack) => ImportFailure('$error'));
+    }, (error, stack) {
+      if (error is Failure) return error;
+      return ImportFailure('$error');
+    });
   }
 }

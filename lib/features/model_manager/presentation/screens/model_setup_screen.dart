@@ -1,5 +1,6 @@
 import 'package:compagnon_pedagogique/core/constants/app_constants.dart';
 import 'package:compagnon_pedagogique/core/theme/app_theme.dart';
+import 'package:compagnon_pedagogique/core/utils/disk_space_checker.dart';
 import 'package:compagnon_pedagogique/features/model_manager/domain/model_status.dart';
 import 'package:compagnon_pedagogique/features/model_manager/presentation/cubit/model_manager_cubit.dart';
 import 'package:compagnon_pedagogique/features/model_manager/presentation/cubit/model_manager_state.dart';
@@ -15,10 +16,141 @@ class ModelSetupScreen extends StatefulWidget {
 }
 
 class _ModelSetupScreenState extends State<ModelSetupScreen> {
+  bool _isStorageAlertShowing = false;
+
   @override
   void initState() {
     super.initState();
     context.read<ModelManagerCubit>().checkStatus();
+  }
+
+  void _showInsufficientStorageDialog(
+    BuildContext context,
+    int? availableBytes,
+  ) {
+    if (_isStorageAlertShowing) return;
+    _isStorageAlertShowing = true;
+
+    final availableStr = availableBytes != null
+        ? SystemDiskSpaceChecker.formatBytes(availableBytes)
+        : 'Inconnu';
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.disc_full_rounded, color: AppTheme.errorRed, size: 28),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Espace Disque Insuffisant',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Le fonctionnement du Compagnon Pédagogique hors-ligne nécessite au moins 1.5 Go d\'espace libre pour installer les modèles d\'intelligence artificielle.',
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.4,
+                color: AppTheme.textDarkSlate,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFECACA)),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Espace disponible :',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textMutedSlate,
+                        ),
+                      ),
+                      Text(
+                        availableStr,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.errorRed,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Espace minimal requis :',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textMutedSlate,
+                        ),
+                      ),
+                      Text(
+                        '1.50 Go',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.primaryRoyalBlue,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Veuillez libérer de l\'espace sur votre stockage interne (suppression de photos, vidéos ou applications inutilisées) puis réessayez.',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.textMutedSlate,
+                height: 1.3,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryRoyalBlue,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _isStorageAlertShowing = false;
+              context.read<ModelManagerCubit>().dismissDiskSpaceAlert();
+            },
+            child: const Text('Compris'),
+          ),
+        ],
+      ),
+    ).then((_) {
+      _isStorageAlertShowing = false;
+      context.read<ModelManagerCubit>().dismissDiskSpaceAlert();
+    });
   }
 
   String _formatBytes(int bytes) {
@@ -69,7 +201,13 @@ class _ModelSetupScreenState extends State<ModelSetupScreen> {
       body: SafeArea(
         child: BlocConsumer<ModelManagerCubit, ModelManagerState>(
           listener: (context, state) {
-            if (state.errorMessage != null) {
+            if (state.isDiskSpaceInsufficient) {
+              _showInsufficientStorageDialog(
+                context,
+                state.availableDiskSpaceBytes,
+              );
+            }
+            if (state.errorMessage != null && !state.isDiskSpaceInsufficient) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(state.errorMessage!),

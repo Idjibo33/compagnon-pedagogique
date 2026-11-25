@@ -1,3 +1,4 @@
+import 'package:compagnon_pedagogique/core/utils/disk_space_checker.dart';
 import 'package:compagnon_pedagogique/features/model_manager/data/model_manager_repository.dart';
 import 'package:compagnon_pedagogique/features/model_manager/presentation/cubit/model_manager_cubit.dart';
 import 'package:compagnon_pedagogique/features/rag_engine/data/local_rag_repository_impl.dart';
@@ -9,9 +10,16 @@ import 'package:get_it/get_it.dart';
 final sl = GetIt.instance;
 
 Future<void> initDependencies() async {
+  // Utilitaires de base
+  sl.registerLazySingleton<DiskSpaceChecker>(
+    () => const SystemDiskSpaceChecker(),
+  );
+
   // Features - Model Manager
   sl.registerLazySingleton<ModelManagerRepository>(
-    () => ModelManagerRepositoryImpl(),
+    () => ModelManagerRepositoryImpl(
+      diskSpaceChecker: sl<DiskSpaceChecker>(),
+    ),
   );
 
   sl.registerFactory(

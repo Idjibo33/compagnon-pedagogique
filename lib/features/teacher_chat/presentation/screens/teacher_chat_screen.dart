@@ -301,7 +301,7 @@ class _TeacherChatScreenState extends State<TeacherChatScreen> {
                       ),
                     ),
                     Text(
-                      'Disponible dans fiches_pdf/',
+                      'Disponible dans Documents/CompagnonPedagogique/',
                       style: TextStyle(
                         color: AppTheme.textMutedSlate,
                         fontSize: 11,
@@ -483,41 +483,40 @@ class _TeacherChatScreenState extends State<TeacherChatScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 2),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppTheme.statusOfflineGreenLight,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      color: Color(0xFF16A34A),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: SizedBox(width: 6, height: 6),
-                                  ),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    '100% Hors Ligne',
-                                    style: TextStyle(
-                                      color: Color(0xFF16A34A),
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
                             ),
-                          ],
+                            decoration: BoxDecoration(
+                              color: AppTheme.statusOfflineGreenLight,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    color: Color(0xFF16A34A),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: SizedBox(width: 6, height: 6),
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  '100% Hors Ligne',
+                                  style: TextStyle(
+                                    color: Color(0xFF16A34A),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ],
                     ),

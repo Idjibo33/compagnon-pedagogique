@@ -261,12 +261,12 @@ void main() {
         // 3. Vérification du message d'accueil et des suggestions 1-tap
         expect(
           find.text(
-            'Bonjour Maître 👋 Décrivez le cours ou l\'exercice dont vous avez besoin.',
+            'Bonjour Maître. Décrivez le cours ou l\'exercice dont vous avez besoin.',
           ),
           findsOneWidget,
         );
         expect(
-          find.text('📝 Préparer une fiche de cours'),
+          find.text('Préparer une fiche de cours'),
           findsOneWidget,
         );
       },
@@ -356,19 +356,30 @@ void main() {
 
         expect(find.byType(TeacherChatScreen), findsOneWidget);
 
-        // 2. Déclencher une demande via la suggestion 1-tap "📝 Préparer une fiche de cours"
-        final suggestionFinder = find.text('📝 Préparer une fiche de cours');
+        // 2. Déclencher une demande via la suggestion 1-tap "Préparer une fiche de cours"
+        final suggestionFinder = find.text('Préparer une fiche de cours');
         expect(suggestionFinder, findsOneWidget);
         await tester.tap(suggestionFinder);
+        await tester.pumpAndSettle();
+
+        // 2b. Parcours de cadrage sans clavier via les puces interactives (Phase 1)
+        final cm1Chip = find.widgetWithText(ActionChip, 'CM1');
+        expect(cm1Chip, findsOneWidget);
+        await tester.tap(cm1Chip);
+        await tester.pumpAndSettle();
+
+        final mathsChip = find.widgetWithText(ActionChip, 'Mathématiques');
+        expect(mathsChip, findsOneWidget);
+        await tester.tap(mathsChip);
 
         // Pomper les frames pour laisser le RAG s'exécuter et le stream se propager
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
         await tester.pumpAndSettle();
 
-        // 3. Vérifier que la recherche RAG a remonté la source officielle des programmes
+        // 3. Vérifier que la recherche RAG a remonté la pastille de source(s) officielle(s) dans l'AppBar
         expect(
-          find.textContaining('Programmes officiels : Mathématiques (CM1)'),
+          find.textContaining('source'),
           findsOneWidget,
         );
 
@@ -378,7 +389,7 @@ void main() {
           findsOneWidget,
         );
 
-        // 5. Vérifier la présence du bouton pilule "Exporter en PDF"
+        // 5. Vérifier la présence du bouton pilule "Exporter en PDF" (FinalActionsBar)
         final exportPdfButton =
             find.widgetWithText(ElevatedButton, 'Exporter en PDF');
         expect(exportPdfButton, findsOneWidget);

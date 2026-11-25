@@ -30,13 +30,25 @@ typedef EdgeAiFallbackStreamer = Stream<String> Function(
   List<DocumentChunk> sources,
 );
 
+typedef InferenceModelLoader = Future<InferenceModel?> Function();
+
 /// Pont IA reliant le moteur Edge AI local (flutter_edge_ai_llama + RagRepository)
 /// au composant LlmChatView de flutter_ai_toolkit.
 class EdgeAiLlmProvider extends LlmProvider with ChangeNotifier {
+  /// Paramètres d'inférence calibrés pour un petit modèle local Qwen 2.5 1.5B
+  /// (topP/topK alignés sur la config officielle Qwen 2.5, température basse)
+  /// afin de limiter les hallucinations et préserver la rigueur pédagogique.
+  static const double defaultTemperature = 0.3;
+  static const double defaultTopP = 0.8;
+  static const int defaultTopK = 20;
+  static const int defaultMaxOutputTokens = 1024;
+  static const int defaultContextWindowTokens = 2048;
+
   final RagRepository _ragRepository;
   final RagContextFormatter _ragContextFormatter;
   final ModelManagerRepository _modelRepository;
   final EdgeAiFallbackStreamer? _fallbackStreamer;
+  final InferenceModelLoader? _inferenceModelLoader;
   final List<ChatMessage> _history;
 
   InferenceModel? _inferenceModel;
@@ -123,12 +135,14 @@ class EdgeAiLlmProvider extends LlmProvider with ChangeNotifier {
     RagContextFormatter? ragContextFormatter,
     required ModelManagerRepository modelRepository,
     EdgeAiFallbackStreamer? fallbackStreamer,
+    InferenceModelLoader? inferenceModelLoader,
     Iterable<ChatMessage>? history,
   })  : _ragRepository = ragRepository,
         _ragContextFormatter =
             ragContextFormatter ?? const RagContextFormatter(),
         _modelRepository = modelRepository,
         _fallbackStreamer = fallbackStreamer,
+        _inferenceModelLoader = inferenceModelLoader,
         _history =
             history != null ? List<ChatMessage>.from(history) : <ChatMessage>[];
 
@@ -182,13 +196,21 @@ class EdgeAiLlmProvider extends LlmProvider with ChangeNotifier {
   /// Charge paresseusement le modèle local qwen2.5-1.5b-instruct-q4_k_m.gguf
   /// en singleton pour préserver la mémoire vive (RAM).
   Future<InferenceModel?> getOrLoadInferenceModel() async {
-    if (_inferenceModel != null) return _inferenceModel;
+    if (_inferenceModel != null && !_inferenceModel!.isClosed) {
+      return _inferenceModel;
+    }
     if (_modelInitCompleter != null) return _modelInitCompleter!.future;
 
     final completer = Completer<InferenceModel?>();
     _modelInitCompleter = completer;
 
     try {
+      if (_inferenceModelLoader != null) {
+        _inferenceModel = await _inferenceModelLoader();
+        completer.complete(_inferenceModel);
+        return _inferenceModel;
+      }
+
       final llmPath =
           await _modelRepository.getModelPath(AppConstants.llmModelFileName);
       final llmFile = File(llmPath);
@@ -199,7 +221,7 @@ class EdgeAiLlmProvider extends LlmProvider with ChangeNotifier {
         return null;
       }
 
-      FlutterEdgeAi.initialize(
+      await FlutterEdgeAi.initialize(
         inferenceEngines: const [LlamaEngineProvider()],
       );
 
@@ -210,7 +232,9 @@ class EdgeAiLlmProvider extends LlmProvider with ChangeNotifier {
       builder.fromFile(llmPath);
       await builder.install();
 
-      _inferenceModel = await FlutterEdgeAi.getActiveModel();
+      _inferenceModel = await FlutterEdgeAi.getActiveModel(
+        maxTokens: defaultContextWindowTokens,
+      );
       completer.complete(_inferenceModel);
       return _inferenceModel;
     } catch (e) {
@@ -332,19 +356,26 @@ class EdgeAiLlmProvider extends LlmProvider with ChangeNotifier {
     String? ragQuery,
   }) async* {
     try {
+      final userPrompt = PromptTemplates.buildUserPrompt(prompt);
+      if (userPrompt.isEmpty) {
+        _setPhase(GenerationPhase.error);
+        yield 'Veuillez saisir une demande pédagogique avant de lancer la génération.';
+        return;
+      }
+
       // 1. Recherche RAG des passages officiels pertinents (limit: 3)
       _setPhase(GenerationPhase.retrievingCurriculum);
       _lastRetrievedSources = await _ragRepository
-          .searchRelevantChunks(ragQuery ?? prompt, limit: 3);
+          .searchRelevantChunks(ragQuery ?? userPrompt, limit: 3);
       _sourcesStreamController.add(_lastRetrievedSources);
 
       // 2. Formatage du contexte officiel
       final formattedContext =
           _ragContextFormatter.format(_lastRetrievedSources);
 
-      // 3. Construction du prompt Qwen 2.5 avec les balises strictes
-      final formattedPrompt = PromptTemplates.formatTeacherPrompt(
-        prompt: prompt,
+      // 3. Construction de l'instruction système sans balisage ChatML manuel
+      // (flutter_edge_ai_llama / llamadart applique le template natif du GGUF).
+      final systemInstruction = PromptTemplates.buildSystemInstruction(
         formattedContext: formattedContext,
       );
 
@@ -354,8 +385,8 @@ class EdgeAiLlmProvider extends LlmProvider with ChangeNotifier {
         _setPhase(GenerationPhase.streamingTokens);
         bool isFirst = true;
         await for (final chunk in _fallbackStreamer(
-          prompt,
-          formattedPrompt,
+          userPrompt,
+          systemInstruction,
           _lastRetrievedSources,
         )) {
           if (isFirst) {
@@ -382,9 +413,17 @@ class EdgeAiLlmProvider extends LlmProvider with ChangeNotifier {
       }
 
       try {
-        final session = await model.openSession();
+        final session = await model.openSession(
+          systemInstruction: systemInstruction,
+          temperature: defaultTemperature,
+          topP: defaultTopP,
+          topK: defaultTopK,
+          maxOutputTokens: defaultMaxOutputTokens,
+        );
         try {
-          await session.addQueryChunk(Message.text(text: formattedPrompt));
+          await session.addQueryChunk(
+            Message.text(text: userPrompt, isUser: true),
+          );
           _setPhase(GenerationPhase.streamingTokens);
           bool isFirst = true;
           await for (final chunk in session.getResponseAsync()) {
@@ -399,6 +438,12 @@ class EdgeAiLlmProvider extends LlmProvider with ChangeNotifier {
         } finally {
           await session.close();
         }
+      } on ContextLimitException catch (e) {
+        debugPrint('[EdgeAiLlmProvider] Dépassement fenêtre de contexte: $e');
+        _setPhase(GenerationPhase.error);
+        yield 'La demande ou les extraits du programme sont trop longs pour la '
+            'mémoire du modèle local. Essayez de reformuler une demande plus '
+            'courte.';
       } catch (e) {
         debugPrint('[EdgeAiLlmProvider] Erreur lors de l\'inférence: $e');
         _setPhase(GenerationPhase.error);

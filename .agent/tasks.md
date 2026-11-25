@@ -24,6 +24,20 @@
   - [x] Élimination du layout shift de 38px & Pastille Sources RAG compacte dans l'AppBar avec feuille modale
   - [x] Barre d'actions finales animée `FinalActionsBar` (200ms slide/fade, export PDF, copier le texte avec coche verte temporaire)
   - [x] Commutateur Mode Plein Soleil (WCAG AAA) avec contraste renforcé pour forte luminosité rurale
+- [x] **Phase 2 : Robustesse, Stockage & Consolidation DX**
+  - [x] Contrôle pré-vol de l'espace disque (vérification >= 1.5 Go via `statvfs` FFI, blocage et affichage d'une alerte claire `AlertDialog` avant téléchargement et import)
+  - [x] Validation stricte du Magic Number GGUF (`0x47 0x47 0x55 0x46` = "GGUF") dès la sélection/importation via Xender/SD avant toute copie
+  - [x] Suppression de `android.permission.MANAGE_EXTERNAL_STORAGE` et de `requestLegacyExternalStorage="true"` dans AndroidManifest.xml (conformité Google Play sans impact SAF)
+  - [x] Export public miroir des fiches PDF dans `Documents/CompagnonPedagogique/` pour faciliter l'extraction USB sur PC sans explorateur root
+  - [x] Amélioration de `SavedPdfsScreen` : recherche textuelle en temps réel, filtres par date ("Toutes", "Aujourd'hui", "Cette semaine"), réinitialisation et ouverture directe avec `open_filex` en plus du partage/impression
+  - [x] Assainissement de `packages/sqlite_vec` : référence locale directe dans `pubspec.yaml` sans override, script de build reproductible Clang NDK `scripts/build_sqlite_vec.sh`, et documentation `packages/sqlite_vec/README.md`
+  - [x] Validation de la suite de tests (73 tests réussis) et `flutter analyze` sans aucun avertissement
+- [x] **Durcissement & Revue Phase 2 :**
+  - [x] Correction UX alerte espace disque : suppression du pop-up bloquant intempestif quand les modèles sont déjà installés, et élimination de la SnackBar d'erreur fantôme lors de la fermeture de l'alerte
+  - [x] Robustesse `SystemDiskSpaceChecker` : résolution des chemins non existants vers le répertoire ancêtre existant
+  - [x] Intégrité de copie GGUF : écriture atomique sur fichier temporaire `.tmp` et rollback/nettoyage en cas d'erreur de transfert
+  - [x] Gestion miroir et nettoyage des PDF : suppression coordonnée dans le stockage interne et public, désactivation des avertissements de polices Helvetica via assainissement emoji
+  - [x] Optimisation de l'ouverture PDF : résolution prioritaire de la copie publique `Documents/CompagnonPedagogique/` pour compatibilité maximale avec les visionneuses tierces sans restrictions SAF
 
 ## Statut Final - Validation Complète (Mission 1, 2, 3, E2E & Phase 1 - Revue et Durcissement)
 - **Durcissement Phase 1 :**

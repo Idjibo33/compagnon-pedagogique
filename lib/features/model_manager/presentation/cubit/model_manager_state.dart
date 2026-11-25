@@ -9,6 +9,8 @@ class ModelManagerState extends Equatable {
   final double importProgress;
   final String? infoMessage;
   final String? errorMessage;
+  final bool isDiskSpaceInsufficient;
+  final int? availableDiskSpaceBytes;
 
   const ModelManagerState({
     this.modelsStatus = const {},
@@ -17,6 +19,8 @@ class ModelManagerState extends Equatable {
     this.importProgress = 0.0,
     this.infoMessage,
     this.errorMessage,
+    this.isDiskSpaceInsufficient = false,
+    this.availableDiskSpaceBytes,
   });
 
   bool get areAllModelsReady {
@@ -57,6 +61,8 @@ class ModelManagerState extends Equatable {
     double? importProgress,
     String? infoMessage,
     String? errorMessage,
+    bool? isDiskSpaceInsufficient,
+    int? availableDiskSpaceBytes,
   }) {
     return ModelManagerState(
       modelsStatus: modelsStatus ?? this.modelsStatus,
@@ -65,6 +71,10 @@ class ModelManagerState extends Equatable {
       importProgress: importProgress ?? this.importProgress,
       infoMessage: infoMessage,
       errorMessage: errorMessage,
+      isDiskSpaceInsufficient:
+          isDiskSpaceInsufficient ?? this.isDiskSpaceInsufficient,
+      availableDiskSpaceBytes:
+          availableDiskSpaceBytes ?? this.availableDiskSpaceBytes,
     );
   }
 
@@ -76,5 +86,7 @@ class ModelManagerState extends Equatable {
         importProgress,
         infoMessage,
         errorMessage,
+        isDiskSpaceInsufficient,
+        availableDiskSpaceBytes,
       ];
 }

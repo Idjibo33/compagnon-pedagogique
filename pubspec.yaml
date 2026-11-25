@@ -30,7 +30,8 @@ dependencies:
 
   # Base de données & RAG Vectoriel
   sqflite: ^2.4.1
-  sqlite_vec: ^0.1.1
+  sqlite_vec:
+    path: packages/sqlite_vec
   path_provider: ^2.1.5
   path: ^1.9.0
 
@@ -54,9 +55,6 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
 
-dependency_overrides:
-  sqlite_vec:
-    path: packages/sqlite_vec
 
 flutter:
   uses-material-design: true

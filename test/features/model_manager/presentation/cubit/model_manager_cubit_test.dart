@@ -15,6 +15,17 @@ class StubModelRepository implements ModelManagerRepository {
       TaskEither.right({});
   TaskEither<Failure, Unit> downloadResult = TaskEither.right(unit);
   TaskEither<Failure, String?> importResult = TaskEither.right(null);
+  bool enoughDiskSpace = true;
+  int? availableDiskSpace = 2000000000;
+
+  @override
+  Future<int?> getAvailableDiskSpace() async => availableDiskSpace;
+
+  @override
+  Future<bool> hasEnoughDiskSpace({
+    int requiredBytes = AppConstants.minFreeDiskSpaceBytes,
+  }) async =>
+      enoughDiskSpace;
 
   void Function(String, Either<Failure, ModelDownloadState>)? emitStatus;
 

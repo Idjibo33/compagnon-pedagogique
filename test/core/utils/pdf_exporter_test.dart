@@ -114,5 +114,38 @@ Corrigé : Vérifier le partage égal.''';
       final list = await PdfExporter.listSavedPdfs();
       expect(list, isEmpty);
     });
+
+    test('getPublicDocumentsDirectory and public copy mirror pedagogical PDF',
+        () async {
+      final publicDir = await PdfExporter.getPublicDocumentsDirectory();
+      expect(publicDir, isNotNull);
+      expect(await publicDir!.exists(), isTrue);
+      expect(publicDir.path, contains(AppConstants.publicPdfDirectoryName));
+
+      final file = await PdfExporter.generatePedagogicalPdf(
+        title: 'Sciences CM1',
+        content: '# Les Énergies Renouvelables\n- Le solaire\n- L\'éolien',
+      );
+
+      final publicFile = File(p.join(publicDir.path, p.basename(file.path)));
+      expect(publicFile.existsSync(), isTrue);
+      expect(publicFile.lengthSync(), equals(file.lengthSync()));
+
+      // Test de suppression synchrone miroir
+      await PdfExporter.deletePdf(file);
+      expect(file.existsSync(), isFalse);
+      expect(publicFile.existsSync(), isFalse);
+    });
+
+    test('generatePedagogicalPdf strip les emojis et ne plante pas', () async {
+      final file = await PdfExporter.generatePedagogicalPdf(
+        title: '🎯 Géographie CE2 🌍',
+        content: '# Les Continents 🗺️\n- L\'Afrique 🦁\n- L\'Europe 🏰',
+        teacherQuery: 'Fiche sur les continents 🧭',
+      );
+
+      expect(file.existsSync(), isTrue);
+      expect(file.lengthSync(), greaterThan(500));
+    });
   });
 }

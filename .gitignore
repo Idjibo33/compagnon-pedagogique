@@ -53,3 +53,9 @@ app.*.map.json
 models/
 assets/models/*.gguf
 fiches_pedagogiques/*.pdf
+
+# Dumps mémoire JVM & clés de signature Android
+*.hprof
+android/key.properties
+*.jks
+*.keystore
